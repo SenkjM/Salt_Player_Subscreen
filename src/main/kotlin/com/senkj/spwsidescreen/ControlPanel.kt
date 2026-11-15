@@ -9,6 +9,7 @@ import java.awt.Point
 import java.awt.RenderingHints
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.awt.geom.Path2D
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
 import javax.swing.BorderFactory
@@ -27,7 +28,9 @@ class ControlPanel(private val onFullscreen: () -> Unit) : JPanel() {
     private var pressPoint: Point? = null
 
     init {
-        isOpaque = false
+        // 直角窗口：整块面板铺满深色背景，避免圆角外露出黑边。
+        isOpaque = true
+        background = Color(20, 20, 26)
         layout = null
         button.isFocusable = false
         button.isFocusPainted = false
@@ -72,11 +75,11 @@ class ControlPanel(private val onFullscreen: () -> Unit) : JPanel() {
             val w = width
             val h = height
             if (w <= 0 || h <= 0) return
-            val shell = RoundRectangle2D.Float(0.5f, 0.5f, (w - 1).toFloat(), (h - 1).toFloat(), 18f, 18f)
-            g2.color = Color(20, 20, 26, 242)
-            g2.fill(shell)
-            g2.color = Color(255, 255, 255, 34)
-            g2.draw(shell)
+            // 直角窗口：整块铺满深色，只画一圈很淡的直角描边。
+            g2.color = Color(20, 20, 26)
+            g2.fillRect(0, 0, w, h)
+            g2.color = Color(255, 255, 255, 30)
+            g2.drawRect(0, 0, w - 1, h - 1)
 
             val coverSize = (h - 24).coerceAtLeast(40)
             val coverX = 12
@@ -112,11 +115,20 @@ class ControlPanel(private val onFullscreen: () -> Unit) : JPanel() {
         } else {
             g2.color = Color(255, 255, 255, 26)
             g2.fillRect(x, y, size, size)
-            g2.font = Font("Microsoft YaHei UI", Font.BOLD, (size * 0.42f).roundToInt().coerceAtLeast(10))
-            g2.color = Color(255, 255, 255, 90)
-            val note = "♪"
-            val nw = g2.fontMetrics.stringWidth(note)
-            g2.drawString(note, x + (size - nw) / 2, y + (size + g2.fontMetrics.ascent) / 2 - 2)
+            // 占位封面用图形绘制，避免字体缺字出现方框。
+            g2.color = Color(255, 255, 255, 46)
+            val circle = (size * 0.46f).roundToInt().coerceAtLeast(12)
+            g2.fillOval(x + (size - circle) / 2, y + (size - circle) / 2, circle, circle)
+            g2.color = Color(255, 255, 255, 170)
+            val tri = Path2D.Float()
+            val cx = x + size / 2.0
+            val cy = y + size / 2.0
+            val r = circle * 0.22
+            tri.moveTo(cx - r * 0.7, cy - r)
+            tri.lineTo(cx + r, cy)
+            tri.lineTo(cx - r * 0.7, cy + r)
+            tri.closePath()
+            g2.fill(tri)
         }
         g2.clip = oldClip
     }
