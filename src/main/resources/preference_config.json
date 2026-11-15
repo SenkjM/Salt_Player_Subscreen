@@ -1,0 +1,31 @@
+{
+  "configs": [
+    {
+      "title": "副屏播放界面",
+      "config": "sidescreen.json",
+      "preferences": [
+        {
+          "key": "remember_screen",
+          "type": "switch",
+          "title": "记住全屏屏幕",
+          "summary": "记住上次全屏使用的显示器，下次启动自动恢复（主屏不会自动恢复，避免遮挡主屏后无法操作）",
+          "default_value": true
+        },
+        {
+          "key": "auto_fullscreen",
+          "type": "switch",
+          "title": "启动时自动全屏",
+          "summary": "启动后自动在副屏全屏显示，无需再点控制小窗的“全屏”；找不到副屏时仍显示控制小窗",
+          "default_value": false
+        },
+        {
+          "key": "always_on_top",
+          "type": "switch",
+          "title": "全屏时窗口置顶",
+          "summary": "全屏播放时保持在其他窗口之上",
+          "default_value": true
+        }
+      ]
+    }
+  ]
+}

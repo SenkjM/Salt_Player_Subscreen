@@ -1,0 +1,14 @@
+# 构建与本地验证产物
+build/
+.gradle/
+out/
+*.spmod
+*.log
+
+# 验证截图
+docs/screenshots/
+
+# IDE
+.idea/
+*.iml
+.vscode/
