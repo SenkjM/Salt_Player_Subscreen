@@ -3,6 +3,7 @@ package com.senkj.spwsidescreen
 import com.xuncorp.spw.workshop.api.PlaybackExtensionPoint
 import java.awt.Color
 import java.awt.Font
+import java.awt.FontMetrics
 import java.awt.GradientPaint
 import java.awt.Graphics
 import java.awt.Graphics2D
@@ -45,6 +46,31 @@ class NowPlayingPanel : JPanel() {
 
     var onExitClick: (() -> Unit)? = null
 
+    /** 是否在封面区域显示播放控件（配置项 show_controls）。 */
+    var controlsEnabled: Boolean = false
+        set(value) {
+            field = value
+            if (!value) {
+                prevHit = null
+                playHit = null
+                nextHit = null
+                seekHit = null
+                hoverControl = -1
+            }
+            repaint()
+        }
+
+    var onPrevious: (() -> Unit)? = null
+    var onPlayPause: (() -> Unit)? = null
+    var onNext: (() -> Unit)? = null
+    var onSeek: ((Float) -> Unit)? = null
+
+    private var prevHit: java.awt.Rectangle? = null
+    private var playHit: java.awt.Rectangle? = null
+    private var nextHit: java.awt.Rectangle? = null
+    private var seekHit: java.awt.Rectangle? = null
+    private var hoverControl = -1
+
     private var exitHit: java.awt.Rectangle? = null
     private var hoverExit = false
 
@@ -56,19 +82,48 @@ class NowPlayingPanel : JPanel() {
         background = Color(0x07070A)
         addMouseListener(object : java.awt.event.MouseAdapter() {
             override fun mouseClicked(e: java.awt.event.MouseEvent) {
-                if (showExitButton && exitHit?.contains(e.point) == true) onExitClick?.invoke()
+                if (showExitButton && exitHit?.contains(e.point) == true) {
+                    onExitClick?.invoke()
+                    return
+                }
+                if (!controlsEnabled) return
+                when {
+                    prevHit?.contains(e.point) == true -> onPrevious?.invoke()
+                    playHit?.contains(e.point) == true -> onPlayPause?.invoke()
+                    nextHit?.contains(e.point) == true -> onNext?.invoke()
+                    seekHit?.let { r ->
+                        if (r.contains(e.point)) {
+                            onSeek?.invoke(((e.x - r.x).toFloat() / r.width.coerceAtLeast(1)).coerceIn(0f, 1f))
+                            true
+                        } else false
+                    } == true -> Unit
+                }
             }
         })
         addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
             override fun mouseMoved(e: java.awt.event.MouseEvent) {
-                if (!showExitButton) return
-                val over = exitHit?.contains(e.point) == true
-                if (over != hoverExit) {
-                    hoverExit = over
+                val overExit = showExitButton && exitHit?.contains(e.point) == true
+                if (overExit != hoverExit) {
+                    hoverExit = overExit
+                    repaint()
+                }
+                var overControl = -1
+                if (controlsEnabled) {
+                    overControl = when {
+                        prevHit?.contains(e.point) == true -> 0
+                        playHit?.contains(e.point) == true -> 1
+                        nextHit?.contains(e.point) == true -> 2
+                        seekHit?.contains(e.point) == true -> 3
+                        else -> -1
+                    }
+                }
+                if (overControl != hoverControl) {
+                    hoverControl = overControl
                     repaint()
                 }
                 cursor = java.awt.Cursor.getPredefinedCursor(
-                    if (over) java.awt.Cursor.HAND_CURSOR else java.awt.Cursor.DEFAULT_CURSOR
+                    if (overExit || overControl >= 0) java.awt.Cursor.HAND_CURSOR
+                    else java.awt.Cursor.DEFAULT_CURSOR
                 )
             }
         })
@@ -115,6 +170,12 @@ class NowPlayingPanel : JPanel() {
         val lyricW = w - lyricLeft - pad
         if (lyricW < 60) return
         paintCover(g2, square, coverX, coverY)
+        if (controlsEnabled) paintControls(g2, coverX, coverY, square) else {
+            prevHit = null
+            playHit = null
+            nextHit = null
+            seekHit = null
+        }
         paintLyrics(g2, lyricLeft, lyricW, h, compact)
     }
 
@@ -123,7 +184,7 @@ class NowPlayingPanel : JPanel() {
             exitHit = null
             return
         }
-        val text = "✕ 退出全屏"
+        val text = "退出全屏"
         g2.font = font(Font.PLAIN, 12)
         val fm = g2.fontMetrics
         val padX = 12
@@ -142,6 +203,113 @@ class NowPlayingPanel : JPanel() {
         g2.draw(shape)
         g2.color = Color(255, 255, 255, 225)
         g2.drawString(text, x + padX, y + padY + fm.ascent)
+    }
+
+    // ---------------------------------------------------------------- 播放控件（封面区域）
+
+    /** 在封面左下区域叠加“上一首 / 播放暂停 / 下一首 + 进度条”，点击事件交给外部回调执行。 */
+    private fun paintControls(g2: Graphics2D, coverX: Int, coverY: Int, square: Int) {
+        val radius = (square * 0.08f).roundToInt().coerceAtLeast(8)
+        val barH = (square * 0.26f).roundToInt().coerceIn(28, square / 2)
+        val barY = coverY + square - barH
+        val clip = RoundRectangle2D.Float(
+            coverX.toFloat(), coverY.toFloat(), square.toFloat(), square.toFloat(),
+            radius.toFloat(), radius.toFloat(),
+        )
+        val oldClip = g2.clip
+        g2.clip = clip
+        g2.paint = GradientPaint(
+            0f, barY.toFloat(), Color(0, 0, 0, 0),
+            0f, (barY + barH).toFloat(), Color(0, 0, 0, 190),
+        )
+        g2.fillRect(coverX, barY, square, barH)
+        g2.clip = oldClip
+
+        val btn = (square * 0.16f).roundToInt().coerceIn(16, 60)
+        val gap = (square * 0.05f).roundToInt().coerceIn(4, 22)
+        val totalW = btn * 3 + gap * 2
+        val startX = coverX + (square - totalW) / 2
+        val rowCenterY = barY + (barH * 0.38f).roundToInt()
+        val icon = btn * 0.5f * 0.72f
+
+        val prevCx = startX + btn / 2
+        val playCx = startX + btn + gap + btn / 2
+        val nextCx = startX + btn * 2 + gap * 2 + btn / 2
+        prevHit = controlHit(prevCx, rowCenterY, btn)
+        playHit = controlHit(playCx, rowCenterY, btn)
+        nextHit = controlHit(nextCx, rowCenterY, btn)
+
+        drawControlCircle(g2, prevCx, rowCenterY, btn, hoverControl == 0)
+        drawControlCircle(g2, playCx, rowCenterY, btn, hoverControl == 1)
+        drawControlCircle(g2, nextCx, rowCenterY, btn, hoverControl == 2)
+        drawSkipIcon(g2, prevCx.toFloat(), rowCenterY.toFloat(), icon, previous = true)
+        if (NowPlayingState.playing) drawPauseIcon(g2, playCx.toFloat(), rowCenterY.toFloat(), icon)
+        else drawPlayIcon(g2, playCx.toFloat(), rowCenterY.toFloat(), icon)
+        drawSkipIcon(g2, nextCx.toFloat(), rowCenterY.toFloat(), icon, previous = false)
+
+        val duration = NowPlayingState.media?.duration ?: 0L
+        val position = NowPlayingState.currentPositionMs()
+        val fraction = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+        val barLeft = coverX + (square * 0.10f).roundToInt()
+        val barWidth = square - (square * 0.20f).roundToInt()
+        val thickness = (square * 0.016f).roundToInt().coerceIn(2, 5)
+        val barTop = coverY + square - (square * 0.07f).roundToInt()
+        g2.color = Color(255, 255, 255, 72)
+        g2.fillRoundRect(barLeft, barTop, barWidth, thickness, thickness, thickness)
+        val fillWidth = (barWidth * fraction).roundToInt()
+        if (fillWidth > 0) {
+            g2.color = progressColor()
+            g2.fillRoundRect(barLeft, barTop, fillWidth, thickness, thickness, thickness)
+        }
+        seekHit = java.awt.Rectangle(barLeft - 8, barTop - 10, barWidth + 16, thickness + 20)
+    }
+
+    private fun controlHit(cx: Int, cy: Int, btn: Int): java.awt.Rectangle {
+        val pad = 4
+        return java.awt.Rectangle(cx - btn / 2 - pad, cy - btn / 2 - pad, btn + pad * 2, btn + pad * 2)
+    }
+
+    private fun drawControlCircle(g2: Graphics2D, cx: Int, cy: Int, btn: Int, hover: Boolean) {
+        val radius = btn / 2
+        g2.color = Color(255, 255, 255, if (hover) 54 else 28)
+        g2.fillOval(cx - radius, cy - radius, btn, btn)
+    }
+
+    private fun drawPlayIcon(g2: Graphics2D, cx: Float, cy: Float, s: Float) {
+        val path = java.awt.geom.Path2D.Float()
+        path.moveTo(cx - s * 0.34f, cy - s * 0.72f)
+        path.lineTo(cx - s * 0.34f, cy + s * 0.72f)
+        path.lineTo(cx + s * 0.62f, cy)
+        path.closePath()
+        g2.color = Color(255, 255, 255, 238)
+        g2.fill(path)
+    }
+
+    private fun drawPauseIcon(g2: Graphics2D, cx: Float, cy: Float, s: Float) {
+        val barW = (s * 0.30f).toInt().coerceAtLeast(2)
+        val barH = (s * 1.46f).toInt().coerceAtLeast(2)
+        val left = (cx - s * 0.46f).toInt()
+        val right = (cx + s * 0.16f).toInt()
+        g2.color = Color(255, 255, 255, 238)
+        g2.fillRoundRect(left, (cy - barH / 2f).toInt(), barW, barH, 2, 2)
+        g2.fillRoundRect(right, (cy - barH / 2f).toInt(), barW, barH, 2, 2)
+    }
+
+    private fun drawSkipIcon(g2: Graphics2D, cx: Float, cy: Float, s: Float, previous: Boolean) {
+        val dir = if (previous) -1f else 1f
+        val h = s * 0.70f
+        val baseX = cx + dir * 0.16f * s
+        val apexX = cx - dir * 0.38f * s
+        val barLeft = if (previous) cx - s * 0.62f else cx + s * 0.36f
+        val barW = s * 0.26f
+        g2.color = Color(255, 255, 255, 238)
+        g2.fillRoundRect(barLeft.toInt(), (cy - h).toInt(), barW.toInt().coerceAtLeast(2), (h * 2f).toInt(), 2, 2)
+        val path = java.awt.geom.Path2D.Float()
+        path.moveTo(baseX, cy - h)
+        path.lineTo(baseX, cy + h)
+        path.lineTo(apexX, cy)
+        path.closePath()
+        g2.fill(path)
     }
 
     // ---------------------------------------------------------------- 背景
@@ -441,6 +609,13 @@ class NowPlayingPanel : JPanel() {
     }
 
     /** 非当前行：先渲染成图片再做高斯模糊，带缓存避免逐帧重复计算；模糊强度对齐 AMLL。 */
+    /** 当前 Graphics2D 对应的设备像素比例（HiDPI 下为 1.25/1.5/2 等）。 */
+    private fun deviceScale(g2: Graphics2D): Float {
+        val fromTransform = g2.transform.scaleX.toFloat()
+        val fromConfig = runCatching { graphicsConfiguration.defaultTransform.scaleX.toFloat() }.getOrDefault(1f)
+        return max(fromTransform, fromConfig).coerceIn(1f, 4f)
+    }
+
     private fun drawBlurredLine(
         g2: Graphics2D,
         text: String,
@@ -451,19 +626,22 @@ class NowPlayingPanel : JPanel() {
         baseline: Int,
         distance: Int,
     ) {
-        val sigma = amllBlurSigma(distance)
-        val kernelRadius = Math.ceil(sigma * 2.2).toInt().coerceAtLeast(1)
+        // AMLL 的 sigma 是按它的大字号（约 42px）标定的；我们的非当前行字号更小，
+        // 若直接套用会显得过糊，因此按字号比例收敛，保持"轻微虚化但可辨识"。
+        val sigma = amllBlurSigma(distance) * (size / 42f).coerceIn(0.45f, 1f)
+        val scale = deviceScale(g2)
         val image = blurredLineImage(
-            g2, text, size, alpha, sigma, kernelRadius, regionWidth, NowPlayingState.colors.lyric,
+            g2, text, size, alpha, sigma, scale, regionWidth, NowPlayingState.colors.lyric,
         ) ?: return
         val fm = getFontMetrics(font(Font.PLAIN, size))
         // AMLL 非活动行统一缩到 0.97，靠模糊和透明度体现纵深。
-        val scale = 0.97f
-        val dw = (image.width * scale).roundToInt()
-        val dh = (image.height * scale).roundToInt()
-        val drawX = left + (regionWidth - dw) / 2
-        val pad = kernelRadius + 2
-        val drawY = (baseline - (pad + fm.ascent) * scale).roundToInt()
+        val shrink = 0.97f
+        val dw = (image.width / scale * shrink).roundToInt()
+        val dh = (image.height / scale * shrink).roundToInt()
+        val drawX = left + ((regionWidth - dw) / 2f).roundToInt()
+        val kernelPx = Math.ceil((sigma * scale * 2.2f).toDouble()).toInt().coerceAtLeast(1)
+        val padLogical = (kernelPx + 2) / scale
+        val drawY = (baseline - (padLogical + fm.ascent) * shrink).roundToInt()
         g2.drawImage(image, drawX, drawY, dw, dh, null)
     }
 
@@ -479,33 +657,57 @@ class NowPlayingPanel : JPanel() {
         size: Int,
         alpha: Int,
         sigma: Float,
-        kernelRadius: Int,
+        deviceScale: Float,
         maxWidth: Int,
         color: Color,
     ): BufferedImage? {
-        val pad = kernelRadius + 2
-        val key = "$size|$alpha|${(sigma * 4f).roundToInt()}|$kernelRadius|$maxWidth|${color.rgb}|$text"
+        val sizePx = (size * deviceScale).roundToInt().coerceAtLeast(1)
+        val sigmaPx = sigma * deviceScale
+        val kernelPx = Math.ceil((sigmaPx * 2.2f).toDouble()).toInt().coerceAtLeast(1)
+        val padPx = kernelPx + 2
+        val maxWidthPx = (maxWidth * deviceScale).roundToInt().coerceAtLeast(1)
+        val key = "$sizePx|$alpha|${(sigmaPx * 4f).roundToInt()}|$kernelPx|$maxWidthPx|${color.rgb}|$text"
         blurCache[key]?.let { return it }
         if (blurCache.size > 48) blurCache.clear()
 
-        val textFont = font(Font.PLAIN, size)
-        val fitted = fitTextWithFont(g2, text, textFont, maxWidth)
-        val fm = getFontMetrics(textFont)
-        val width = (fm.stringWidth(fitted) + pad * 2).coerceAtLeast(1)
-        val height = (fm.height + pad * 2).coerceAtLeast(1)
+        val textFont = font(Font.PLAIN, sizePx)
+        val probe = BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB)
+        val pg = probe.createGraphics()
+        val fitted: String
+        val fm: FontMetrics
+        try {
+            pg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+            pg.font = textFont
+            fitted = fitTextInPixels(pg, text, maxWidthPx)
+            fm = pg.fontMetrics
+        } finally {
+            pg.dispose()
+        }
+        val width = (fm.stringWidth(fitted) + padPx * 2).coerceAtLeast(1)
+        val height = (fm.height + padPx * 2).coerceAtLeast(1)
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB)
         val ig = image.createGraphics()
         try {
             ig.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
             ig.font = textFont
             ig.color = Color(color.red, color.green, color.blue, alpha)
-            ig.drawString(fitted, pad, pad + fm.ascent)
+            ig.drawString(fitted, padPx, padPx + fm.ascent)
         } finally {
             ig.dispose()
         }
-        val result = if (sigma > 0.2f) gaussianBlur(image, sigma, kernelRadius) else image
+        val result = if (sigmaPx > 0.2f) gaussianBlur(image, sigmaPx, kernelPx) else image
         blurCache[key] = result
         return result
+    }
+
+    /** 设备像素坐标下的省略号截断（用于设备分辨率渲染的模糊图）。 */
+    private fun fitTextInPixels(g: Graphics2D, text: String, maxWidthPx: Int): String {
+        if (text.isEmpty()) return text
+        val fm = g.fontMetrics
+        if (fm.stringWidth(text) <= maxWidthPx) return text
+        var end = text.length
+        while (end > 0 && fm.stringWidth(text.substring(0, end) + "…") > maxWidthPx) end--
+        return if (end <= 0) "…" else text.substring(0, end) + "…"
     }
 
     private fun gaussianBlur(source: BufferedImage, sigma: Float, radius: Int): BufferedImage {

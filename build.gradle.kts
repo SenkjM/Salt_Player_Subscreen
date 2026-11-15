@@ -44,7 +44,7 @@ spmod {
     PluginName = "副屏播放界面"
     PluginDescription = "在指定显示器上自绘播放界面，支持 640x340 / 320x170 低分辨率适配与逐字歌词，宿主可保持托盘常驻"
     PluginVersion = "0.1.0"
-    PluginProvider = "senkj"
+    PluginProvider = "SenkjM"
     PluginHasConfig = true
     PluginPermissions = listOf(PluginPermission.LIBRARY_READ)
 }

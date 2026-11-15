@@ -1,5 +1,7 @@
 package com.senkj.spwsidescreen
 
+import com.xuncorp.spw.workshop.api.WorkshopApi
+import java.awt.Color
 import java.awt.GraphicsDevice
 import java.awt.GraphicsEnvironment
 import java.awt.Rectangle
@@ -18,7 +20,7 @@ import javax.swing.WindowConstants
  *
  * 两种形态：
  *  - 控制小窗：可拖到任意显示器，点“全屏”后在该显示器上铺满；
- *  - 全屏：显示封面 + 歌词，右上角常驻“退出全屏”，ESC 也可退出。
+ *  - 全屏：显示封面 + 歌词，右上角鼠标悬停时显示“退出全屏”，ESC 也可退出。
  *
  * 全屏所用的显示器会被记录，下次启动自动恢复（主屏除外，避免误遮挡主屏后无法操作）。
  */
@@ -27,6 +29,7 @@ class SubscreenWindow(
     private val rememberScreen: Boolean,
     private val alwaysOnTop: Boolean,
     private val autoFullscreen: Boolean,
+    private val showControls: Boolean,
 ) : JFrame("SPW 副屏播放界面") {
 
     private enum class Mode { CONTROL, FULLSCREEN }
@@ -51,8 +54,27 @@ class SubscreenWindow(
         defaultCloseOperation = WindowConstants.DO_NOTHING_ON_CLOSE
         type = Window.Type.UTILITY
         isAutoRequestFocus = false
+        // 小窗/全屏都只画圆角内容，圆角外露出的 rootPane 背景保持深色，避免白边。
+        background = Color(15, 16, 21)
+        rootPane.background = Color(15, 16, 21)
 
         playerPanel.onExitClick = { exitFullscreen() }
+        playerPanel.controlsEnabled = showControls
+        playerPanel.onPrevious = { runPlayback { WorkshopApi.playback.previous() } }
+        playerPanel.onNext = { runPlayback { WorkshopApi.playback.next() } }
+        playerPanel.onPlayPause = {
+            runPlayback {
+                if (NowPlayingState.playing) WorkshopApi.playback.pause() else WorkshopApi.playback.play()
+            }
+        }
+        playerPanel.onSeek = { fraction ->
+            runPlayback {
+                val duration = NowPlayingState.media?.duration ?: 0L
+                if (duration > 0L) {
+                    WorkshopApi.playback.seekTo((duration * fraction.coerceIn(0f, 1f)).toLong())
+                }
+            }
+        }
         rootPane.registerKeyboardAction(
             { exitFullscreen() },
             KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
@@ -66,6 +88,10 @@ class SubscreenWindow(
             restore != null -> enterFullscreen(restore, remember = false)
             else -> showControl()
         }
+    }
+
+    private inline fun runPlayback(block: () -> Unit) {
+        runCatching(block)
     }
 
     fun open() {

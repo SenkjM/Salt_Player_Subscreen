@@ -24,6 +24,13 @@
           "title": "全屏时窗口置顶",
           "summary": "全屏播放时保持在其他窗口之上",
           "default_value": true
+        },
+        {
+          "key": "show_controls",
+          "type": "switch",
+          "title": "封面区域显示播放控件",
+          "summary": "在封面左下方叠加暂停/恢复、上一首、下一首和进度条（点击进度条可跳转）",
+          "default_value": true
         }
       ]
     }

@@ -47,19 +47,26 @@ class MainPlugin(pluginContext: PluginContext) : SpwPlugin(pluginContext) {
             rememberScreen = settings.rememberScreen,
             alwaysOnTop = settings.alwaysOnTop,
             autoFullscreen = settings.autoFullscreen,
+            showControls = settings.showControls,
         ).also { it.open() }
     }
 
     private fun readSettings(): Pair<Settings, Path> {
-        val fallback = Settings(true, true, false) to Path.of(".")
+        val fallback = Settings(true, true, false, true) to Path.of(".")
         return runCatching {
             val helper: ConfigHelper = WorkshopApi.manager.createConfigManager().getConfig("sidescreen.json")
             helper.reload()
             val remember = helper.get("remember_screen", true) as? Boolean ?: true
             val onTop = helper.get("always_on_top", true) as? Boolean ?: true
             val auto = helper.get("auto_fullscreen", false) as? Boolean ?: false
+            val controls = helper.get("show_controls", true) as? Boolean ?: true
             val dataDir = helper.getConfigPath().parent ?: Path.of(".")
-            Settings(rememberScreen = remember, alwaysOnTop = onTop, autoFullscreen = auto) to dataDir
+            Settings(
+                rememberScreen = remember,
+                alwaysOnTop = onTop,
+                autoFullscreen = auto,
+                showControls = controls,
+            ) to dataDir
         }.getOrDefault(fallback)
     }
 
@@ -67,5 +74,6 @@ class MainPlugin(pluginContext: PluginContext) : SpwPlugin(pluginContext) {
         val rememberScreen: Boolean,
         val alwaysOnTop: Boolean,
         val autoFullscreen: Boolean,
+        val showControls: Boolean,
     )
 }
