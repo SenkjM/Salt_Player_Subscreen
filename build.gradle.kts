@@ -46,5 +46,6 @@ spmod {
     PluginVersion = "0.1.0"
     PluginProvider = "SenkjM"
     PluginHasConfig = true
+    PluginOpenSourceUrl = "https://github.com/SenkjM/Salt_Player_Subscreen"
     PluginPermissions = listOf(PluginPermission.LIBRARY_READ)
 }
