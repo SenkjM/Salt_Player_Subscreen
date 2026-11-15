@@ -5,6 +5,7 @@ import com.xuncorp.spw.workshop.api.WorkshopApi
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
 
@@ -56,21 +57,41 @@ object NowPlayingState {
     @Volatile
     private var linesAttempts: Int = 0
 
-    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "sidescreen-worker").apply { isDaemon = true }
-    }
+    private val lock = Any()
+
+    /**
+     * 轮询线程池在插件禁用时会被 shutdown。宿主可能反复启用/禁用插件（或重启后重新加载），
+     * 所以每次 start() 都要确保线程池是活的，不能复用已经 terminate 的实例。
+     */
+    private var worker: ScheduledExecutorService? = null
     private var started = false
 
-    fun start() {
-        if (started) return
-        started = true
-        worker.scheduleWithFixedDelay({ runCatching { pollTrack() } }, 0, 1, TimeUnit.SECONDS)
+    fun start(): Unit = synchronized(lock) {
+        val alive = worker?.let { !it.isShutdown && !it.isTerminated } == true
+        if (alive) {
+            started = true
+        } else {
+            val executor = Executors.newSingleThreadScheduledExecutor { r ->
+                Thread(r, "sidescreen-worker").apply { isDaemon = true }
+            }
+            worker = executor
+            started = true
+            try {
+                executor.scheduleWithFixedDelay({ runCatching { pollTrack() } }, 0, 1, TimeUnit.SECONDS)
+            } catch (error: Throwable) {
+                runCatching { executor.shutdownNow() }
+                worker = null
+                started = false
+                throw error
+            }
+        }
     }
 
-    fun stop() {
-        if (!started) return
+    fun stop(): Unit = synchronized(lock) {
         started = false
-        worker.shutdownNow()
+        val executor = worker
+        worker = null
+        runCatching { executor?.shutdownNow() }
     }
 
     private fun keyOf(item: PlaybackExtensionPoint.MediaItem): String = "${item.id}|${item.path}"
