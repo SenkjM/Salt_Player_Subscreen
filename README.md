@@ -66,3 +66,7 @@ Salt Player for Windows 工坊插件：把播放界面（封面 + 歌词）投�
 4. 产物：`build/libs/plugin-com.senkj.spwsidescreen-<version>.spmod`。
 
 安装：把 `.spmod` 复制到 `%APPDATA%\Salt Player for Windows\workshop\plugins\`，在工坊中启用并授予 `library-read` 权限，重启宿主。
+
+## 许可证
+
+本项目以 [GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0）授权发布。
