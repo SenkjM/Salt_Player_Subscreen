@@ -13,7 +13,7 @@ plugins {
 }
 
 group = "com.senkj.spwsidescreen"
-version = "0.1.0"
+version = "0.2.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_25
@@ -43,7 +43,7 @@ spmod {
     PluginId = "com.senkj.spwsidescreen"
     PluginName = "副屏播放界面"
     PluginDescription = "在指定显示器上自绘播放界面，支持 640x340 / 320x170 低分辨率适配与逐字歌词，宿主可保持托盘常驻"
-    PluginVersion = "0.1.0"
+    PluginVersion = "0.2.0"
     PluginProvider = "SenkjM"
     PluginHasConfig = true
     PluginOpenSourceUrl = "https://github.com/SenkjM/Salt_Player_Subscreen"
