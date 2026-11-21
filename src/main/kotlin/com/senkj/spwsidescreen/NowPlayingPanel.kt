@@ -60,6 +60,17 @@ class NowPlayingPanel : JPanel() {
             repaint()
         }
 
+    /** 竖屏布局：歌词区域在上，封面容器在下；横竖屏切换时由窗口层设置。 */
+    var portrait: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            lastActiveIdx = -1
+            animOffset = 0f
+            animOffsetVel = 0f
+            repaint()
+        }
+
     var onPrevious: (() -> Unit)? = null
     var onPlayPause: (() -> Unit)? = null
     var onNext: (() -> Unit)? = null
@@ -159,8 +170,24 @@ class NowPlayingPanel : JPanel() {
             return
         }
         val compact = w < 460 || h < 200
-        val pad = if (compact) 10 else (h * 0.055f).roundToInt().coerceIn(10, 22)
-        // 封面容器宽度约为窗口的 1/3，同时不超出可用高度。
+        val pad = if (compact) 10 else (min(w, h) * 0.055f).roundToInt().coerceIn(10, 22)
+        if (portrait) {
+            // 竖屏：歌词在上，方形封面容器贴底居中，封面最大占屏幕高度的 1/3。
+            val square = min(w - pad * 2, (h / 3f).roundToInt()).coerceAtLeast(40)
+            val coverX = (w - square) / 2
+            val coverY = h - pad - square
+            paintCover(g2, square, coverX, coverY)
+            if (controlsEnabled) paintControls(g2, coverX, coverY, square) else {
+                prevHit = null
+                playHit = null
+                nextHit = null
+                seekHit = null
+            }
+            val lyricsBottom = (coverY - pad).coerceAtLeast(pad + 40)
+            paintLyrics(g2, pad, w - pad * 2, pad, lyricsBottom, compact || w < 460)
+            return
+        }
+        // 横屏：封面容器宽度约为窗口的 1/3，同时不超出可用高度。
         var square = (w / 3f).roundToInt()
         square = min(square, h - pad * 2)
         square = square.coerceAtLeast(40)
@@ -176,7 +203,7 @@ class NowPlayingPanel : JPanel() {
             nextHit = null
             seekHit = null
         }
-        paintLyrics(g2, lyricLeft, lyricW, h, compact)
+        paintLyrics(g2, lyricLeft, lyricW, 0, h, compact)
     }
 
     private fun paintExitButton(g2: Graphics2D, w: Int, h: Int) {
@@ -439,34 +466,42 @@ class NowPlayingPanel : JPanel() {
         animPulseVel = pv
     }
 
-    private fun paintLyrics(g2: Graphics2D, left: Int, width: Int, h: Int, compact: Boolean) {
+    private fun paintLyrics(
+        g2: Graphics2D,
+        left: Int,
+        width: Int,
+        top: Int,
+        bottom: Int,
+        compact: Boolean,
+    ) {
+        val regionHeight = (bottom - top).coerceAtLeast(40)
         val lines = NowPlayingState.lines
         val pos = NowPlayingState.currentPositionMs()
         if (lines.isEmpty()) {
-            paintNoLyrics(g2, left, width, h, compact)
+            paintNoLyrics(g2, left, width, top, bottom, compact)
             return
         }
         var idx = activeIndex(lines, pos)
         if (idx < 0) {
             idx = lines.indexOfFirst { it.pureMainText.isNotBlank() }
             if (idx < 0) {
-                paintNoLyrics(g2, left, width, h, compact)
+                paintNoLyrics(g2, left, width, top, bottom, compact)
                 return
             }
         }
         val current = lines[idx]
         if (current.pureMainText.isBlank()) {
-            paintNoLyrics(g2, left, width, h, compact)
+            paintNoLyrics(g2, left, width, top, bottom, compact)
             return
         }
 
-        val activeSize = if (compact) (h * 0.10f).roundToInt().coerceIn(12, 20)
-        else (h * 0.108f).roundToInt().coerceIn(16, 36)
+        val activeSize = if (compact) (min(regionHeight, width) * 0.10f).roundToInt().coerceIn(12, 20)
+        else (min(regionHeight, width) * 0.108f).roundToInt().coerceIn(16, 36)
         val translation = current.pureSubText?.takeIf { it.isNotBlank() }
 
         // 先容纳"最多三行"再决定字号：宁可换行，也不要为了塞进一行把字压得过小。
         val minSize = if (compact) 10 else 13
-        val maxBlockHeight = (h * if (compact) 0.46f else 0.40f).roundToInt()
+        val maxBlockHeight = (regionHeight * if (compact) 0.46f else 0.40f).roundToInt()
         var size = activeSize
         var wrapped = wrapLyricText(g2, current.pureMainText, width, size)
         var translationSize = translationSizeFor(size, compact)
@@ -482,7 +517,7 @@ class NowPlayingPanel : JPanel() {
             translationSize = translationSizeFor(size, compact)
         }
         if (wrapped.isEmpty()) {
-            paintNoLyrics(g2, left, width, h, compact)
+            paintNoLyrics(g2, left, width, top, bottom, compact)
             return
         }
         if (wrapped.size > MAX_WRAPPED_LINES) {
@@ -496,12 +531,13 @@ class NowPlayingPanel : JPanel() {
 
         val fm = getFontMetrics(font(Font.BOLD, size))
         val lineStep = lineHeight
-        // 当前歌词块的第一行中心固定在高度 1/4 处，换行后继续向下排。
-        val blockTop = (h * 0.25f).roundToInt() - lineStep / 2
+        // 当前歌词块首行中心固定在歌词区域高度的 1/4（竖屏 1/3）处，换行后继续向下排。
+        val anchorFraction = if (portrait) 0.32f else 0.25f
+        val blockTop = (top + regionHeight * anchorFraction).roundToInt() - lineStep / 2
         val firstBaseline = blockTop + (lineStep + fm.ascent - fm.descent) / 2
         val blockBottom = blockTop + wrapped.size * lineStep
 
-        val pad = if (compact) 8 else (h * 0.03f).roundToInt().coerceIn(6, 14)
+        val pad = if (compact) 8 else (regionHeight * 0.03f).roundToInt().coerceIn(6, 14)
         val inactiveSize = (size * 0.52f).roundToInt().coerceAtLeast(9)
         val inactiveFm = getFontMetrics(font(Font.PLAIN, inactiveSize))
 
@@ -512,14 +548,14 @@ class NowPlayingPanel : JPanel() {
         val prev = lines.getOrNull(idx - 1)
         if (prev != null && prev.pureMainText.isNotBlank() && !(compact && wrapped.size >= 2)) {
             val prevBaseline = blockTop - 6 + offset
-            if (prevBaseline - (pad + inactiveFm.ascent) >= 0f) {
+            if (prevBaseline - (pad + inactiveFm.ascent) >= top.toFloat()) {
                 drawBlurredLine(g2, prev.pureMainText, inactiveSize, 120, left, width, prevBaseline, distance = 1)
             }
         }
 
         // 下一句区域从"当前块 + 翻译"下方开始排，最多三句。
         val nextTop = blockBottom + translationHeight
-        val below = (h - pad - nextTop).coerceAtLeast(1)
+        val below = (bottom - pad - nextTop).coerceAtLeast(1)
         var nextStep = (inactiveFm.height * 1.55f).roundToInt()
         nextStep = min(nextStep, (below / 3.0f).roundToInt().coerceAtLeast(1))
         nextStep = nextStep.coerceAtLeast((inactiveFm.height * 1.05f).roundToInt())
@@ -528,7 +564,7 @@ class NowPlayingPanel : JPanel() {
             val next = lines.getOrNull(idx + k) ?: break
             if (next.pureMainText.isBlank()) continue
             val baseline = nextTop + nextStep * k + offset
-            if (baseline - inactiveFm.ascent > h - pad) break
+            if (baseline - inactiveFm.ascent > bottom - pad) break
             drawBlurredLine(g2, next.pureMainText, inactiveSize, nextAlphas[k - 1], left, width, baseline, distance = k)
         }
 
@@ -600,12 +636,20 @@ class NowPlayingPanel : JPanel() {
         g2.drawString(fitted, left + (regionWidth - tw) / 2, baseline)
     }
 
-    private fun paintNoLyrics(g2: Graphics2D, left: Int, width: Int, h: Int, compact: Boolean) {
+    private fun paintNoLyrics(
+        g2: Graphics2D,
+        left: Int,
+        width: Int,
+        top: Int,
+        bottom: Int,
+        compact: Boolean,
+    ) {
         g2.font = font(Font.PLAIN, if (compact) 11 else 15)
         g2.color = Color(255, 255, 255, 110)
         val text = "暂无歌词"
         val tw = g2.fontMetrics.stringWidth(text)
-        g2.drawString(text, left + (width - tw) / 2, (h + g2.fontMetrics.ascent) / 2)
+        val centerY = (top + (bottom - top) / 2.0).roundToInt()
+        g2.drawString(text, left + (width - tw) / 2, centerY + g2.fontMetrics.ascent / 2)
     }
 
     /** 非当前行：先渲染成图片再做高斯模糊，带缓存避免逐帧重复计算；模糊强度对齐 AMLL。 */

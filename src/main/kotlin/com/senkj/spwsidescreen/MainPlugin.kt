@@ -18,7 +18,6 @@ class MainPlugin(pluginContext: PluginContext) : SpwPlugin(pluginContext) {
         NowPlayingState.start()
         installConfigListener()
         EventQueue.invokeLater { recreateWindow() }
-        WorkshopApi.ui.toast("副屏播放界面已启动", WorkshopApi.Ui.ToastType.Success)
     }
 
     override fun stop() {
@@ -48,11 +47,12 @@ class MainPlugin(pluginContext: PluginContext) : SpwPlugin(pluginContext) {
             alwaysOnTop = settings.alwaysOnTop,
             autoFullscreen = settings.autoFullscreen,
             showControls = settings.showControls,
+            portraitLayout = settings.portraitLayout,
         ).also { it.open() }
     }
 
     private fun readSettings(): Pair<Settings, Path> {
-        val fallback = Settings(true, true, false, true) to Path.of(".")
+        val fallback = Settings(true, true, false, true, false) to Path.of(".")
         return runCatching {
             val helper: ConfigHelper = WorkshopApi.manager.createConfigManager().getConfig("sidescreen.json")
             helper.reload()
@@ -60,12 +60,14 @@ class MainPlugin(pluginContext: PluginContext) : SpwPlugin(pluginContext) {
             val onTop = helper.get("always_on_top", true) as? Boolean ?: true
             val auto = helper.get("auto_fullscreen", false) as? Boolean ?: false
             val controls = helper.get("show_controls", true) as? Boolean ?: true
+            val portrait = helper.get("portrait_layout", false) as? Boolean ?: false
             val dataDir = helper.getConfigPath().parent ?: Path.of(".")
             Settings(
                 rememberScreen = remember,
                 alwaysOnTop = onTop,
                 autoFullscreen = auto,
                 showControls = controls,
+                portraitLayout = portrait,
             ) to dataDir
         }.getOrDefault(fallback)
     }
@@ -75,5 +77,6 @@ class MainPlugin(pluginContext: PluginContext) : SpwPlugin(pluginContext) {
         val alwaysOnTop: Boolean,
         val autoFullscreen: Boolean,
         val showControls: Boolean,
+        val portraitLayout: Boolean,
     )
 }

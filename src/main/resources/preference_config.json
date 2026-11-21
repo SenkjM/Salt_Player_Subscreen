@@ -31,6 +31,13 @@
           "title": "封面区域显示播放控件",
           "summary": "在封面左下方叠加暂停/恢复、上一首、下一首和进度条（点击进度条可跳转）",
           "default_value": true
+        },
+        {
+          "key": "portrait_layout",
+          "type": "switch",
+          "title": "竖屏布局",
+          "summary": "开启后歌词在上、封面在下（适用于竖屏副屏）；关闭为横屏布局（封面在左、歌词在右）",
+          "default_value": false
         }
       ]
     }

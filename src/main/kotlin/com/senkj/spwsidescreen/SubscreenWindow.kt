@@ -30,6 +30,7 @@ class SubscreenWindow(
     private val alwaysOnTop: Boolean,
     private val autoFullscreen: Boolean,
     private val showControls: Boolean,
+    private val portraitLayout: Boolean,
 ) : JFrame("SPW 副屏播放界面") {
 
     private enum class Mode { CONTROL, FULLSCREEN }
@@ -60,6 +61,7 @@ class SubscreenWindow(
 
         playerPanel.onExitClick = { exitFullscreen() }
         playerPanel.controlsEnabled = showControls
+        playerPanel.portrait = portraitLayout
         playerPanel.onPrevious = { runPlayback { WorkshopApi.playback.previous() } }
         playerPanel.onNext = { runPlayback { WorkshopApi.playback.next() } }
         playerPanel.onPlayPause = {
